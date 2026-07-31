@@ -19,12 +19,14 @@ OmegaUp.on('ready', () => {
     data: {
       jobs: payload.jobs,
       runs: payload.runs,
+      recommendationModelRuns: payload.recommendationModelRuns,
     },
     render: function (createElement) {
       return createElement('omegaup-admin-crons', {
         props: {
           jobs: this.jobs,
           runs: this.runs,
+          recommendationModelRuns: this.recommendationModelRuns,
         },
         on: {
           rerun: (name: string) => {
