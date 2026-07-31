@@ -46,6 +46,23 @@ describe('Crons.vue', () => {
     expect(wrapper.find('.badge-danger').exists()).toBe(true);
   });
 
+  it('Should show a health card per job with its success rate', () => {
+    const wrapper = mount(Crons, { propsData: { jobs, runs } });
+
+    expect(wrapper.find('[data-cron-health]').exists()).toBe(true);
+    expect(wrapper.find('[data-cron-health]').text()).toContain('100%');
+  });
+
+  it('Should filter runs by status', async () => {
+    const wrapper = mount(Crons, { propsData: { jobs, runs } });
+
+    expect(wrapper.findAll('[data-cron-runs] tbody tr').length).toBe(2);
+    await wrapper.find('[data-cron-filter-status]').setValue('failure');
+    const rows = wrapper.findAll('[data-cron-runs] tbody tr');
+    expect(rows.length).toBe(1);
+    expect(rows.at(0).text()).toContain('assign_badges.py');
+  });
+
   it('Should show phase detail when a run is expanded', async () => {
     const wrapper = mount(Crons, { propsData: { jobs, runs } });
 
