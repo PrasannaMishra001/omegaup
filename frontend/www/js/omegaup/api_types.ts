@@ -1606,15 +1606,17 @@ export namespace types {
       elementId: string = 'payload',
     ): types.CronsDetailsPayload {
       return ((x) => {
-        x.recommendationModelRuns = ((x) => {
+        x.problemHealthFindings = ((x) => {
           if (!Array.isArray(x)) {
             return x;
           }
           return x.map((x) => {
-            x.created_at = ((x: number) => new Date(x * 1000))(x.created_at);
+            x.first_detected_at = ((x: number) => new Date(x * 1000))(
+              x.first_detected_at,
+            );
             return x;
           });
-        })(x.recommendationModelRuns);
+        })(x.problemHealthFindings);
         x.runs = ((x) => {
           if (!Array.isArray(x)) {
             return x;
@@ -3843,7 +3845,7 @@ export namespace types {
 
   export interface CronsDetailsPayload {
     jobs: types.CronJob[];
-    recommendationModelRuns: types.RecommendationModelRun[];
+    problemHealthFindings: types.ProblemHealthFinding[];
     runs: types.CronRun[];
   }
 
@@ -4420,6 +4422,16 @@ export namespace types {
     role: string;
   }
 
+  export interface ProblemHealthFinding {
+    alias: string;
+    check_type: string;
+    detail?: string;
+    first_detected_at: Date;
+    problem_id: number;
+    severity: string;
+    title: string;
+  }
+
   export interface ProblemInfo {
     accepts_submissions: boolean;
     alias: string;
@@ -4677,14 +4689,6 @@ export namespace types {
   export interface Progress {
     max_score: number;
     score: number;
-  }
-
-  export interface RecommendationModelRun {
-    created_at: Date;
-    dataset_size: number;
-    map_score: number;
-    published: boolean;
-    skip_reason?: string;
   }
 
   export interface Run {

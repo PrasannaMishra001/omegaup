@@ -20,6 +20,7 @@ OmegaUp.on('ready', () => {
       jobs: payload.jobs,
       runs: payload.runs,
       recommendationModelRuns: payload.recommendationModelRuns,
+      problemHealthFindings: payload.problemHealthFindings,
     },
     render: function (createElement) {
       return createElement('omegaup-admin-crons', {
@@ -27,6 +28,7 @@ OmegaUp.on('ready', () => {
           jobs: this.jobs,
           runs: this.runs,
           recommendationModelRuns: this.recommendationModelRuns,
+          problemHealthFindings: this.problemHealthFindings,
         },
         on: {
           rerun: (name: string) => {
