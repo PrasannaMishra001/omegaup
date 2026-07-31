@@ -319,6 +319,123 @@ class Model:
         return score / user_count
 
 
+def record_model_run(
+        dbconn: lib.db.Connection,
+        *,
+        cron_run_id: Optional[int],
+        config: 'TrainingConfig',
+        map_score: float,
+        dataset_size: int,
+        output_path: str,
+        published: bool,
+        skip_reason: Optional[str],
+) -> None:
+    '''Records one training run into `Recommendation_Model_Runs`.
+
+    This is what lets the admin dashboard show how the model quality has moved
+    over time and lets the guardrail compare against the last published model.
+    '''
+    with dbconn.cursor() as cur:
+        cur.execute(
+            '''
+            INSERT INTO `Recommendation_Model_Runs`
+                (`cron_run_id`, `map_score`, `dataset_size`, `num_followups`,
+                 `followup_decay`, `train_fraction`, `output_path`,
+                 `published`, `skip_reason`)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);''',
+            (cron_run_id, map_score, dataset_size, config.num_followups,
+             config.followup_decay, config.train_fraction, output_path,
+             1 if published else 0, skip_reason))
+    dbconn.conn.commit()
+
+
+def get_last_published_map(dbconn: lib.db.Connection) -> Optional[float]:
+    '''Returns the MAP score of the most recently published model, or None.'''
+    with dbconn.cursor() as cur:
+        cur.execute(
+            '''
+            SELECT `map_score`
+            FROM `Recommendation_Model_Runs`
+            WHERE `published` = 1
+            ORDER BY `created_at` DESC
+            LIMIT 1;''')
+        row = cur.fetchone()
+    if not row:
+        return None
+    return float(row[0])
+
+
+def should_publish(
+        score: float,
+        min_map_score: float,
+        last_published_map: Optional[float],
+        max_map_regression: float,
+) -> Tuple[bool, Optional[str]]:
+    '''Decides whether the freshly trained model should be published.
+
+    This is the write-audit-publish guardrail. It keeps the previous model
+    live when the new one is below the absolute floor, or when it regresses
+    more than `max_map_regression` below the last published model, so a bad
+    training run cannot replace a good one.
+    '''
+    if score < min_map_score:
+        return False, (
+            f'MAP score {score:.4f} below minimum {min_map_score:.4f}')
+    if (last_published_map is not None
+            and score < last_published_map - max_map_regression):
+        return False, (
+            f'MAP score {score:.4f} regressed more than '
+            f'{max_map_regression:.4f} below the last published '
+            f'{last_published_map:.4f}')
+    return True, None
+
+
+def train_and_publish(
+        cron_run: lib.runner.CronRun,
+        args: argparse.Namespace,
+        runs: pd.DataFrame,
+) -> None:
+    '''Trains, publishes if it passes the guardrail, and records the run.'''
+    model = Model(
+        TrainingConfig(train_fraction=args.train_fraction,
+                       rng_seed=args.rng_seed,
+                       num_followups=args.num_followups,
+                       followup_decay=args.followup_decay), runs)
+    score = model.evaluate()
+    logging.info('Model MAP score: %f', score)
+    dataset_size = len(runs)
+    cron_run.set_rows_affected(dataset_size)
+
+    dbconn = (
+        lib.db.connect(lib.db.DatabaseConnectionArguments.from_args(args))
+        if not args.no_track else None)
+    try:
+        last_published_map = (
+            get_last_published_map(dbconn) if dbconn is not None else None)
+        published, skip_reason = should_publish(
+            score, args.min_map_score, last_published_map,
+            args.max_map_regression)
+        if published:
+            model.save(args.output)
+        else:
+            logging.error('Model NOT saved. %s', skip_reason)
+            cron_run.mark_failure()
+
+        if dbconn is not None:
+            record_model_run(
+                dbconn,
+                cron_run_id=cron_run.run_id,
+                config=model.config,
+                map_score=score,
+                dataset_size=dataset_size,
+                output_path=args.output,
+                published=published,
+                skip_reason=skip_reason)
+    finally:
+        if dbconn is not None:
+            dbconn.conn.close()
+
+
 def build_parser() -> argparse.ArgumentParser:
     '''Returns a argparse.ArgumentParser for this tool.'''
     parser = argparse.ArgumentParser(
@@ -359,6 +476,12 @@ def build_parser() -> argparse.ArgumentParser:
                                help='Minimum MAP score to consider the '
                                'training successful. Use to ensure we '
                                'don\'t push bad models to prod.')
+    training_args.add_argument('--max-map-regression',
+                               type=float,
+                               default=0.05,
+                               help='Do not publish a model whose MAP score '
+                               'is more than this below the last published '
+                               'model. Keeps the previous good model live.')
     # Input/Output
     io_args = parser.add_argument_group('Input/Output')
     io_args.add_argument('--sqlite-database',
@@ -400,22 +523,7 @@ def main() -> None:
                     runs = runs[:args.num_rows]
 
             with cron_run.phase('train_model'):
-                model = Model(
-                    TrainingConfig(train_fraction=args.train_fraction,
-                                   rng_seed=args.rng_seed,
-                                   num_followups=args.num_followups,
-                                   followup_decay=args.followup_decay), runs)
-
-                score = model.evaluate()
-                logging.info('Model MAP score: %f', score)
-                if score >= args.min_map_score:
-                    # Save current model
-                    model.save(args.output)
-                else:
-                    logging.error(
-                        'Model NOT saved. Resulting accuracy was too low: '
-                        '%f below %f', score, args.min_map_score)
-                    cron_run.mark_failure()
+                train_and_publish(cron_run, args, runs)
         except:  # noqa: bare-except
             logging.exception('Failed to update recommendation model.')
             raise
