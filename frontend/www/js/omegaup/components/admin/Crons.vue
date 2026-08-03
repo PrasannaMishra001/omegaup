@@ -273,7 +273,15 @@
         <thead>
           <tr>
             <th>{{ T.cronControlPlaneStarted }}</th>
-            <th>{{ T.cronControlPlaneModelScore }}</th>
+            <th>
+              {{ T.cronControlPlaneModelScore }}
+              <font-awesome-icon
+                v-b-tooltip.hover
+                class="text-muted"
+                :icon="['fas', 'info-circle']"
+                :title="T.cronControlPlaneModelScoreInfo"
+              />
+            </th>
             <th>{{ T.cronControlPlaneModelDataset }}</th>
             <th>{{ T.cronControlPlaneModelPublished }}</th>
             <th>{{ T.cronControlPlaneModelSkipReason }}</th>
