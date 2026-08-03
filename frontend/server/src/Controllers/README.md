@@ -6,6 +6,7 @@
   - [`/api/admin/getMaintenanceMode/`](#apiadmingetmaintenancemode)
   - [`/api/admin/platformReportStats/`](#apiadminplatformreportstats)
   - [`/api/admin/rerunCron/`](#apiadminreruncron)
+  - [`/api/admin/setCronJobEnabled/`](#apiadminsetcronjobenabled)
   - [`/api/admin/setMaintenanceMode/`](#apiadminsetmaintenancemode)
 - [AiEditorial](#aieditorial)
   - [`/api/aiEditorial/generate/`](#apiaieditorialgenerate)
@@ -406,6 +407,23 @@ request is queued.
 | Name   | Type     | Description | Required |
 | ------ | -------- | ----------- | -------- |
 | `name` | `string` |             | ✓        |
+
+### Returns
+
+_Nothing_
+
+## `/api/admin/setCronJobEnabled/`
+
+### Description
+
+Enables or disables a cron job. A disabled job skips its scheduled runs.
+
+### Parameters
+
+| Name      | Type     | Description | Required |
+| --------- | -------- | ----------- | -------- |
+| `enabled` | `bool`   |             | ✓        |
+| `name`    | `string` |             | ✓        |
 
 ### Returns
 

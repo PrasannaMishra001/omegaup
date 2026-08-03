@@ -12,6 +12,7 @@ For more information about the API controllers, please refer to the [Controllers
   - [`/api/admin/getMaintenanceMode/`](https://github.com/omegaup/omegaup/blob/main/frontend/server/src/Controllers/README.md#apiadmingetmaintenancemode)
   - [`/api/admin/platformReportStats/`](https://github.com/omegaup/omegaup/blob/main/frontend/server/src/Controllers/README.md#apiadminplatformreportstats)
   - [`/api/admin/rerunCron/`](https://github.com/omegaup/omegaup/blob/main/frontend/server/src/Controllers/README.md#apiadminreruncron)
+  - [`/api/admin/setCronJobEnabled/`](https://github.com/omegaup/omegaup/blob/main/frontend/server/src/Controllers/README.md#apiadminsetcronjobenabled)
   - [`/api/admin/setMaintenanceMode/`](https://github.com/omegaup/omegaup/blob/main/frontend/server/src/Controllers/README.md#apiadminsetmaintenancemode)
 - [AiEditorial](https://github.com/omegaup/omegaup/blob/main/frontend/server/src/Controllers/README.md#aieditorial)
   - [`/api/aiEditorial/generate/`](https://github.com/omegaup/omegaup/blob/main/frontend/server/src/Controllers/README.md#apiaieditorialgenerate)
