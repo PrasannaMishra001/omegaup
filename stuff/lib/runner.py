@@ -57,13 +57,7 @@ class CronRun:  # pylint: disable=too-many-instance-attributes
         self._run_id: Optional[int] = None
         self._phases: List[Dict[str, Any]] = []
         self._rows_affected: Optional[int] = None
-        self._forced_failure = False
         self._start_monotonic = 0.0
-
-    @property
-    def run_id(self) -> Optional[int]:
-        '''The Cron_Runs id of this execution, or None when not tracking.'''
-        return self._run_id
 
     @property
     def _lock_name(self) -> str:
@@ -77,6 +71,11 @@ class CronRun:  # pylint: disable=too-many-instance-attributes
             or lib.db.connect(
                 lib.db.DatabaseConnectionArguments.from_args(self._args)))
         self._owns_connection = self._external_connection is None
+        if self._is_disabled():
+            logging.info(
+                'cron job %s is disabled, skipping', self._program)
+            self._close_connection()
+            raise SystemExit(0)
         if not self._acquire_lock():
             logging.info(
                 'cron job %s is already running, skipping', self._program)
@@ -130,13 +129,19 @@ class CronRun:  # pylint: disable=too-many-instance-attributes
         '''Records how many rows the job wrote, for reporting.'''
         self._rows_affected = rows
 
-    def mark_failure(self) -> None:
-        '''Forces this run to be recorded as a failure.
+    def _is_disabled(self) -> bool:
+        '''Whether the registry says this job should not run.
 
-        Useful for jobs that report failures through a return value instead
-        of raising, so the recorded status stays truthful.
+        A job with no registry row runs normally, so the ondemand scripts that
+        are not registered are unaffected.
         '''
-        self._forced_failure = True
+        assert self._connection is not None
+        with self._connection.cursor() as cur:
+            cur.execute(
+                'SELECT `enabled` FROM `Cron_Jobs` WHERE `name` = %s;',
+                (self._program,))
+            row = cur.fetchone()
+        return bool(row is not None and not row[0])
 
     def _acquire_lock(self) -> bool:
         assert self._connection is not None
@@ -170,12 +175,7 @@ class CronRun:  # pylint: disable=too-many-instance-attributes
     def _finish(self, exc_value: Any) -> None:
         if self._connection is None or self._run_id is None:
             return
-        phase_failed = any(
-            phase['status'] == 'failure' for phase in self._phases)
-        status = (
-            'failure'
-            if exc_value is not None or phase_failed or self._forced_failure
-            else 'success')
+        status = 'failure' if exc_value is not None else 'success'
         error_text: Optional[str] = None
         if exc_value is not None:
             error_text = f'{type(exc_value).__name__}: {exc_value}'

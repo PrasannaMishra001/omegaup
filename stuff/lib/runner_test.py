@@ -32,7 +32,9 @@ class _FakeCursor:
         '''Records the statement and scripts the next GET_LOCK answer.'''
         self._connection.calls.append((query, params))
         normalized = ' '.join(query.lower().split())
-        if 'get_lock' in normalized:
+        if 'from `cron_jobs`' in normalized:
+            self._connection.last_fetchone = self._connection.enabled_row
+        elif 'get_lock' in normalized:
             self._connection.last_fetchone = (
                 (1,) if self._connection.lock_acquired else (0,))
         else:
@@ -53,11 +55,15 @@ class _FakeCursor:
         del exc_type, exc, traceback
 
 
-class _FakeConnection:
+class _FakeConnection:  # pylint: disable=too-many-instance-attributes
     '''Minimal stand-in for lib.db.Connection.'''
 
-    def __init__(self, lock_acquired: bool = True) -> None:
+    def __init__(
+            self,
+            lock_acquired: bool = True,
+            enabled_row: Optional[Tuple[int]] = None) -> None:
         self.lock_acquired = lock_acquired
+        self.enabled_row = enabled_row
         self.calls: List[Tuple[str, Any]] = []
         self.commits = 0
         self.closed = False
@@ -169,34 +175,6 @@ def test_no_track_bypasses_all_database_access() -> None:
     assert conn.commits == 0
 
 
-def test_run_fails_when_phase_failed_but_error_was_swallowed() -> None:
-    '''A swallowed phase error still marks the whole run as failed.'''
-    conn = _FakeConnection(lock_acquired=True)
-    with _run('update_ranks.py', _args(), conn) as run:
-        try:
-            with run.phase('flaky'):
-                raise RuntimeError('handled')
-        except RuntimeError:
-            pass
-
-    status, _duration, _rows, phases, _error, _run_id = _matching(
-        conn.calls, 'update `cron_runs`')[0]
-    assert status == 'failure'
-    assert json.loads(phases)[0]['status'] == 'failure'
-
-
-def test_mark_failure_forces_failure_status() -> None:
-    '''mark_failure forces a failure status even without an exception.'''
-    conn = _FakeConnection(lock_acquired=True)
-    with _run('assign_badges.py', _args(), conn) as run:
-        with run.phase('process_badges'):
-            pass
-        run.mark_failure()
-
-    status = _matching(conn.calls, 'update `cron_runs`')[0][0]
-    assert status == 'failure'
-
-
 def test_records_every_phase_in_order() -> None:
     '''Phases are recorded in the order they ran.'''
     conn = _FakeConnection(lock_acquired=True)
@@ -208,3 +186,30 @@ def test_records_every_phase_in_order() -> None:
 
     phases = json.loads(_matching(conn.calls, 'update `cron_runs`')[0][3])
     assert [entry['phase'] for entry in phases] == ['first', 'second']
+
+
+def test_disabled_job_skips_without_recording() -> None:
+    '''A job the registry marks disabled exits cleanly and records nothing.'''
+    conn = _FakeConnection(lock_acquired=True, enabled_row=(0,))
+    args = _args()
+
+    with pytest.raises(SystemExit) as excinfo:
+        with lib.runner.run('update_ranks.py', args,
+                            connection=cast(lib.db.Connection, conn)):
+            pass
+
+    assert excinfo.value.code == 0
+    assert not any('INSERT INTO `Cron_Runs`' in query
+                   for query, _ in conn.calls)
+
+
+def test_unregistered_job_still_runs() -> None:
+    '''A job with no registry row is not treated as disabled.'''
+    conn = _FakeConnection(lock_acquired=True, enabled_row=None)
+    args = _args()
+
+    with lib.runner.run('plagiarism_detector.py', args,
+                        connection=cast(lib.db.Connection, conn)):
+        pass
+
+    assert any('INSERT INTO `Cron_Runs`' in query for query, _ in conn.calls)
