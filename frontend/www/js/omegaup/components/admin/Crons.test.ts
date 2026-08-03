@@ -79,7 +79,7 @@ describe('Crons.vue', () => {
 
     expect(wrapper.find('[data-cron-jobs]').exists()).toBe(true);
     expect(wrapper.find('[data-cron-runs]').exists()).toBe(true);
-    expect(wrapper.text()).toContain('update_ranks.py');
+    expect(wrapper.text()).toContain('Update rankings');
     expect(wrapper.find('.badge-success').exists()).toBe(true);
     expect(wrapper.find('.badge-danger').exists()).toBe(true);
   });
@@ -98,7 +98,7 @@ describe('Crons.vue', () => {
     await wrapper.find('[data-cron-filter-status]').setValue('failure');
     const rows = wrapper.findAll('[data-cron-runs] tbody tr');
     expect(rows.length).toBe(1);
-    expect(rows.at(0).text()).toContain('assign_badges.py');
+    expect(rows.at(0).text()).toContain('Award badges');
   });
 
   it('Should show phase detail when a run is expanded', async () => {
@@ -108,7 +108,7 @@ describe('Crons.vue', () => {
     await wrapper.findAll('[data-cron-runs] tbody tr').at(0).trigger('click');
     expect(wrapper.find('[data-cron-phases]').exists()).toBe(true);
     expect(wrapper.find('[data-cron-phases]').text()).toContain(
-      'update_users_stats',
+      'Update users stats',
     );
   });
 
@@ -151,6 +151,49 @@ describe('Crons.vue', () => {
 
     expect(wrapper.find('[data-problem-health]').exists()).toBe(false);
     expect(wrapper.text()).toContain(T.problemHealthNoFindings);
+  });
+
+  it('Should keep the script name on hover while showing a readable one', () => {
+    const wrapper = mount(Crons, { propsData: { jobs, runs } });
+
+    const cell = wrapper.find('[data-cron-jobs] tbody tr td span');
+    expect(cell.text()).toBe('Update rankings');
+    expect(cell.attributes('title')).toBe('update_ranks.py');
+  });
+
+  it('Should show the schedule in words with the expression on hover', () => {
+    const wrapper = mount(Crons, { propsData: { jobs, runs } });
+
+    const schedule = wrapper.findAll('[data-cron-jobs] tbody tr td').at(1);
+    expect(schedule.text()).toContain('08:19');
+    expect(schedule.find('span').attributes('title')).toBe('19 8 * * *');
+  });
+
+  it('Should fall back to the raw schedule when it is not a simple one', () => {
+    const wrapper = mount(Crons, { propsData: { jobs, runs } });
+
+    expect((wrapper.vm as any).humanSchedule('*/5 * * * *')).toBe(
+      '*/5 * * * *',
+    );
+    expect((wrapper.vm as any).humanSchedule('0 4 * * 0')).toContain('Sunday');
+  });
+
+  it('Should show an empty state when there are no runs', () => {
+    const wrapper = mount(Crons, { propsData: { jobs, runs: [] } });
+
+    expect(wrapper.text()).toContain(T.cronControlPlaneNoRuns);
+  });
+
+  it('Should emit set-enabled when the switch is toggled', async () => {
+    const wrapper = mount(Crons, { propsData: { jobs, runs } });
+
+    const toggle = wrapper.find('[data-cron-enabled]');
+    expect((toggle.element as HTMLInputElement).checked).toBe(true);
+    await toggle.setChecked(false);
+
+    const emitted = wrapper.emitted('set-enabled');
+    expect(emitted).toBeTruthy();
+    expect(emitted?.[0]).toEqual([{ name: 'update_ranks.py', enabled: false }]);
   });
 
   it('Should emit rerun with the job name when the button is clicked', async () => {
